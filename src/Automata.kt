@@ -1,5 +1,4 @@
 import java.util.*
-import java.util.function.Predicate
 import kotlin.collections.ArrayList
 
 class Automata {
@@ -59,8 +58,8 @@ class Automata {
 
             val rawTransitions = splicedExpression[1].split(Constants.SEPARATOR)
             rawTransitions.forEach {
-                var destinationState: State
-                var symbol: Char
+                val destinationState: State
+                val symbol: Char
 
                 if (it.startsWith('<')) {
                     stateLabel = getStateLabel(it)
@@ -98,7 +97,7 @@ class Automata {
             var currentState = if (!hasStates()) newState() else getState("0")
 
             token.forEach { symbol ->
-                var nextState = newState()
+                val nextState = newState()
                 currentState.newTransition(symbol, nextState)
                 addSymbol(symbol)
                 currentState = nextState
@@ -116,15 +115,15 @@ class Automata {
         var hasChange: Boolean
         do {
             hasChange = false
-            var states = _states.toList()
+            val states = _states.toList()
             states.forEach { currentState ->
                 if (currentState.hasTransitions()) {
                     alphabet.forEach { symbol ->
-                        var currentTransitions = currentState.getTransitions(symbol)
+                        val currentTransitions = currentState.getTransitions(symbol)
                         if (currentTransitions.isNotEmpty() && currentTransitions.count() > 1) {
                             hasChange = true
-                            var joinedTransitions = ArrayList<Transition>()
-                            var joinedState = newState()
+                            val joinedTransitions = ArrayList<Transition>()
+                            val joinedState = newState()
                             currentTransitions.forEach { t ->
                                 joinedTransitions.addAll(t.state.getTransitions())
                                 currentState.removeTransition(t)
@@ -140,7 +139,7 @@ class Automata {
     }
 
     fun removeDeads() {
-        var deadStates: ArrayList<State> = ArrayList()
+        val deadStates: ArrayList<State> = ArrayList()
 
         _states.forEach { state ->
             if (!state.final) {
@@ -153,7 +152,7 @@ class Automata {
         _states.removeIf { t -> deadStates.contains(t)}
 
         _states.forEach { state ->
-            var newTransitions = state.getTransitions().filter {t ->
+            val newTransitions = state.getTransitions().filter {t ->
                 _states.contains(t.state)
             } as ArrayList<Transition>
 
@@ -162,27 +161,57 @@ class Automata {
         }
     }
 
-    fun removeEpsilons() {
+    fun addErrorState() {
+        val alphabet = _alphabet.toList()
+        val errorState = newState()
+        errorState.final = true
 
-        var hasChange: Boolean
-        do {
-            hasChange = false
-            _states.forEach {currentState ->
-                val transitions = currentState.getTransitions(Constants.EPSILON)
-
-                if (transitions.isNotEmpty()) {
-                    val transitionState = transitions[0].state
-
-                    transitionState.getTransitions().forEach{ transition ->
-                        if (transition.symbol != Constants.EPSILON) {
-                            hasChange = hasChange || currentState.addTransition(transition)
-                        }
-                    }
-                    currentState.removeTransitions(transitions)
+        _states.forEach { state ->
+            alphabet.forEach { symbol ->
+                if (state.getTransitions(symbol).isEmpty()) {
+                    state.addTransition(Transition(symbol, errorState))
                 }
             }
-        } while (hasChange)
-        _alphabet.remove(Constants.EPSILON)
+        }
+    }
+
+    fun removeEpsilons() {
+        var hasChange: Boolean
+        if (_alphabet.contains(Constants.EPSILON)){
+            do {
+                hasChange = false
+                _states.forEach {currentState ->
+                    val epsilonTransitions = currentState.getTransitions(Constants.EPSILON)
+
+                    if (epsilonTransitions.isNotEmpty()) {
+                        val nextState = epsilonTransitions[0].state
+
+                        nextState.getTransitions().forEach{ transition ->
+                            if (transition.symbol != Constants.EPSILON) {
+                                hasChange = currentState.addTransition(transition) || hasChange
+                            }
+                        }
+
+                        _states.forEach { state ->
+                            if (state != nextState) {
+                                state.getTransitions().forEach { transition ->
+                                    if (transition.state == nextState && transition.symbol != Constants.EPSILON) {
+                                        hasChange = state.addTransition(Transition(transition.symbol, currentState)) || hasChange
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } while (hasChange)
+
+            _states.forEach { state ->
+                val epsilonTransitions = state.getTransitions(Constants.EPSILON)
+                state.removeTransitions(epsilonTransitions)
+            }
+
+            _alphabet.remove(Constants.EPSILON)
+        }
     }
 
     fun toCSV() : String{
